@@ -67,12 +67,15 @@ export const listAgents = createServerFn({ method: 'GET' }).handler(
       // Fall through to stub
     }
 
-    // Default Luciverse agents from calibration.ini
+    // Full Luciverse agent registry from calibration.ini + agent-rules.md
     return [
-      { id: 'lucia', title: 'Lucia AI', service: 'Anthropic' },
-      { id: 'claude-veritas', title: 'Claude Veritas', service: 'Anthropic' },
-      { id: 'juniper', title: 'Juniper', service: 'Ollama' },
-      { id: 'legislature', title: 'Legislature', service: 'Anthropic' },
+      { id: 'lucia',         title: 'Lucia (741 Hz Orchestrator)', service: 'Anthropic', frequency: 741 },
+      { id: 'judge-luci',    title: 'Judge Luci (963 Hz Crown)',    service: 'Anthropic', frequency: 963 },
+      { id: 'juniper',       title: 'Juniper (639 Hz Throat)',      service: 'Ollama',    frequency: 639 },
+      { id: 'cortana',       title: 'Cortana (852 Hz Third Eye)',   service: 'Ollama',    frequency: 852 },
+      { id: 'claude-veritas', title: 'Claude Veritas (432 Hz Truth)', service: 'Anthropic', frequency: 432 },
+      { id: 'aethon',        title: 'Aethon (528 Hz Heart)',        service: 'Ollama',    frequency: 528 },
+      { id: 'pinky',         title: 'Pinky (111 Hz Vanguard)',      service: 'Ollama',    frequency: 111 },
     ]
   },
 )

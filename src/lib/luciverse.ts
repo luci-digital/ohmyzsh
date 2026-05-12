@@ -40,6 +40,7 @@ export interface AgentProfile {
   id: string
   title: string
   service: string
+  frequency?: number
   system_message?: string
 }
 

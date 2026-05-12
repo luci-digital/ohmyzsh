@@ -37,6 +37,20 @@ export default function Header() {
           >
             Signal
           </Link>
+          <Link
+            to="/mission-control"
+            className="nav-link"
+            activeProps={{ className: 'nav-link is-active' }}
+          >
+            Mission Control
+          </Link>
+          <Link
+            to="/non-terms"
+            className="nav-link"
+            activeProps={{ className: 'nav-link is-active' }}
+          >
+            Non-Terms
+          </Link>
         </div>
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
