@@ -8,8 +8,20 @@ log/
 .DS_Store
 
 # editor configs
-.vscode
 .idea
+
+# tanstack / vite
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.nitro
+.tanstack
+.wrangler
+.output
+.vinxi
+__unconfig*
 
 # zcompile cached files
 *.zwc
