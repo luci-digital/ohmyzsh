@@ -145,6 +145,10 @@ Push-only. Pull forbidden. Coherence ≥ 0.7.
 
 Data flows through the 5-stage Data Juicer: fill → filter → extract → verify → release.
 
+### Foundations
+
+Substrate technology choices and how they map to substrate areas — see [`docs/FOUNDATIONS.md`](docs/FOUNDATIONS.md). Covers: Reown, WorkOS AuthKit (trust); Oxc (tooling); Smelter, React Native Reanimated (signal/media); Hyprland (graphics); UST-QuAntiL (quantum); Sacred Computer, Internet.dev wireframes (design).
+
 ### Next Steps
 
 1. Copy `.env.example` to `.env` and configure endpoints.
