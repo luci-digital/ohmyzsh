@@ -1,5 +1,31 @@
 import { Link } from '@tanstack/react-router'
+import { useState, useEffect } from 'react'
 import ThemeToggle from './ThemeToggle'
+import { toLuciTime, formatLuciHeader, type LuciTime } from '#/lib/luci-clock'
+
+function LuciClockDisplay() {
+  const [lt, setLt] = useState<LuciTime>(() => toLuciTime())
+
+  useEffect(() => {
+    // Update ~every 1.83s (one pulse ≈ 1831ms)
+    const id = setInterval(() => setLt(toLuciTime()), 1831)
+    return () => clearInterval(id)
+  }, [])
+
+  const solar = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+  return (
+    <div
+      className="hidden flex-col items-end sm:flex"
+      title={`LuciClock: cycle ${lt.cycle}, pulse ${lt.pulse}`}
+    >
+      <span className="font-mono text-[10px] font-semibold text-[#9370db]">
+        {formatLuciHeader(lt)}
+      </span>
+      <span className="font-mono text-[9px] text-[var(--sea-ink-soft)]">{solar}</span>
+    </div>
+  )
+}
 
 export default function Header() {
   return (
@@ -60,7 +86,8 @@ export default function Header() {
           </Link>
         </div>
 
-        <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
+        <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          <LuciClockDisplay />
           <a
             href="https://x.com/tan_stack"
             target="_blank"
