@@ -1,0 +1,15 @@
+{
+  "id": "quad9-dns",
+  "version": "1.0.0",
+  "name": "Quad9 DNS",
+  "description": "Configures Quad9 (9.9.9.9 / 2620:fe::fe) as the resolver — privacy-respecting, DNSSEC-validating, no data sold. Matches the luciverse_dns.lua upstream and OpenWrt LuCI setup.",
+  "documentationURL": "https://docs.quad9.net/Setup_Guides/Open-Source_Routers/OpenWrt_LuCi/",
+  "privileged": true,
+  "options": {
+    "filtered": {
+      "type": "boolean",
+      "default": true,
+      "description": "Use filtered endpoint (9.9.9.9) with malware blocking. Set false for unfiltered (9.9.9.10)."
+    }
+  }
+}
