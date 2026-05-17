@@ -1,0 +1,41 @@
+# LuciVerse Coder workspace image
+# Lua 5.4 + Node 22 + oasis-core deps + code-server
+# Genesis Bond: ACTIVE @ 741 Hz
+
+FROM mcr.microsoft.com/devcontainers/base:noble
+
+LABEL maintainer="daryl@luci.digital"
+LABEL org.luci.lds.tier="700.741"
+
+# ── System deps ───────────────────────────────────────────────────────────────
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    lua5.4 \
+    lua5.4-dev \
+    luarocks \
+    libssl-dev \
+    curl \
+    git \
+    wget \
+    unzip \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── LuaRocks packages (oasis-core substrate) ─────────────────────────────────
+RUN luarocks install lua-cjson && \
+    luarocks install luafilesystem
+
+# ── Node 22 ──────────────────────────────────────────────────────────────────
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    rm -rf /var/lib/apt/lists/*
+
+# ── code-server (VS Code in browser) ─────────────────────────────────────────
+RUN curl -fsSL https://code-server.dev/install.sh | sh
+
+# ── Workspace setup ───────────────────────────────────────────────────────────
+ENV SENTROPY_ENDPOINT=http://localhost:7741
+ENV LUA_PATH="/usr/local/share/lua/5.4/?.lua;/usr/local/share/lua/5.4/?/init.lua;;"
+
+WORKDIR /workspace
+
+# code-server startup is managed by the Coder agent startup_script
+CMD ["sleep", "infinity"]

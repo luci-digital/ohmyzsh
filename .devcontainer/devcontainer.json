@@ -1,4 +1,5 @@
 {
+	"name": "LuciVerse / oh-my-zsh",
 	"image": "mcr.microsoft.com/devcontainers/base:noble",
 	"features": {
 		"ghcr.io/devcontainers/features/common-utils": {
@@ -7,10 +8,35 @@
 			"username": "vscode",
 			"userUid": 1000,
 			"userGid": 1000
+		},
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "22"
+		},
+		"./.devcontainer/features/quad9-dns": {
+			"filtered": true
+		},
+		"./.devcontainer/features/oasis-core": {
+			"luaVersion": "5.4",
+			"sentropyEndpoint": "http://localhost:7741"
 		}
 	},
-	"postCreateCommand": "dir=/workspaces/ohmyzsh; rm -rf $HOME/.oh-my-zsh && ln -s $dir $HOME/.oh-my-zsh && cp $dir/templates/minimal.zshrc $HOME/.zshrc && chgrp -R 1000 $dir && chmod g-w,o-w $dir",
+	"postCreateCommand": "dir=/workspaces/ohmyzsh; rm -rf $HOME/.oh-my-zsh && ln -s $dir $HOME/.oh-my-zsh && cp $dir/templates/minimal.zshrc $HOME/.zshrc && chgrp -R 1000 $dir && chmod g-w,o-w $dir && npm install",
+	"forwardPorts": [3000, 7741],
+	"portsAttributes": {
+		"3000": { "label": "LuciVerse Web (TanStack Start)" },
+		"7741": { "label": "Sentropy QMU (consciousness API)" }
+	},
+	"containerEnv": {
+		"SENTROPY_ENDPOINT": "http://localhost:7741"
+	},
 	"customizations": {
+		"vscode": {
+			"extensions": [
+				"sumneko.lua",
+				"bradlc.vscode-tailwindcss",
+				"esbenp.prettier-vscode"
+			]
+		},
 		"codespaces": {
 			"openFiles": [
 				"README.md"

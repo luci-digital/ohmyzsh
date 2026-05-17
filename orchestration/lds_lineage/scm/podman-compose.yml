@@ -1,0 +1,329 @@
+# 🚀 DEPLOYED VIA PODMAN (No-Docker Policy Enforced)
+# This stack replaces Gitea/PostgreSQL with Gogs/FoundationDB/Gitoxide
+
+networks:
+  fusion-net:
+    driver: bridge # Podman's netavark handles this hermetically
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: "fd26:02f6:7400::/48"
+
+services:
+  # ---------------------------------------------------------------------
+  # 1) GOGS + GITOXIDE: Go Git Service with Pure-Rust git backend
+  # ---------------------------------------------------------------------
+  scm-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile.gogs
+    image: lucia/gogs-gitoxide:latest
+    container_name: gogs
+    restart: unless-stopped
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+    networks:
+      - fusion-net
+    volumes:
+      - gogs-data:/data
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ---------------------------------------------------------------------
+  # 2) LUCIA ORCHESTRATOR: Genesis Drop Box (741 Hz)
+  # ---------------------------------------------------------------------
+  lucia-orchestrator:
+    build:
+      context: /Users/darylharr/Daryl_harr_feb26_26/workspace/lucia/luciverse-core-orchestrator
+      dockerfile: Dockerfile
+    container_name: lucia
+    restart: unless-stopped
+    depends_on:
+      scm-engine:
+        condition: service_healthy
+    environment:
+      - LUCIA_PORT=8741
+    networks:
+      - fusion-net
+    ports:
+      - "8741:8741"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8741/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ---------------------------------------------------------------------
+  # 3) FOUNDATIONDB: [DISABLED] - Using Host FoundationDB
+  # ---------------------------------------------------------------------
+  # state-manager:
+  #   image: foundationdb/foundationdb:7.3.27
+  #   container_name: fdb
+  #   networks:
+  #     - fusion-net
+  #   volumes:
+  #     - fdb-data:/var/fdb/data
+  #   ports:
+  #     - "4500:4500"
+
+  # ---------------------------------------------------------------------
+  # 4) GITOXIDE: Now embedded inside scm-engine (Dockerfile.gogs)
+  #    gix & ein available at /usr/local/bin/ inside the Gogs container
+  # ---------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------
+  # 5) RAY (Orchestrator): Distributed Sub-Agent compute
+  # ---------------------------------------------------------------------
+  ray-head:
+    image: rayproject/ray:latest-cpu
+    container_name: ray-orchestrator
+    restart: unless-stopped
+    command: bash -c "ray start --head --dashboard-host=0.0.0.0 --block"
+    networks:
+      - fusion-net
+    ports:
+      - "8265:8265"
+      - "6378:6379" # Changed to 6378 to avoid conflict with host Redis
+
+  # ---------------------------------------------------------------------
+  # 6) CADDY: The Sovereign Ingress Gateway (IPv6-native, no host ports)
+  # ---------------------------------------------------------------------
+  sovereign-gateway:
+    image: caddy:latest
+    container_name: caddy-ingress
+    networks:
+      - fusion-net
+    # IPv6-native: no host port mappings — Caddy listens on LuciVerse
+    # IPv6 addresses at standard 80/443 within the fusion-net bridge.
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # A-Tune-UI SPA build output — set ATUNE_UI_DIST to override
+      - ${ATUNE_UI_DIST:-../../../A-Tune-UI/dist/spa}:/srv/veritas:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      - ACME_AGREE=true
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------
+  # 7) BUILD AGENT: xmake + Cargo + Lua + gix (scm-ci pipeline)
+  # Principle #6: Podman only — built with buildah
+  # Principle #11: Reads Gogs repo data via shared gogs-data volume
+  # ---------------------------------------------------------------------
+  build-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.builder
+    image: lucia/build-agent:latest
+    container_name: build-agent
+    restart: "no"
+    depends_on:
+      scm-engine:
+        condition: service_healthy
+    networks:
+      - fusion-net
+    volumes:
+      - gogs-data:/gogs-data:ro
+      - /Users/darylharr/lucia_compositor:/workspace/compositor:ro
+      - /Users/darylharr/lua-substrate:/workspace/lua-substrate:ro
+    ports:
+      - "8742:8742"
+    healthcheck:
+      test: ["CMD", "gix", "--version"]
+      interval: 60s
+      timeout: 5s
+      retries: 2
+
+  # ---------------------------------------------------------------------
+  # 8) OPENDEEPWIKI: AI-powered code-to-docs from Gogs repos
+  # .NET 9 + Next.js — indexes Gogs repos into searchable knowledge
+  # MCP endpoint at /api/mcp for agent-queryable docs
+  # Principle #5: Airgap-First — uses local Ollama for inference
+  # ---------------------------------------------------------------------
+  opendeepwiki:
+    image: docker.io/nerdneils/opendeepwiki:latest
+    platform: linux/amd64
+    container_name: opendeepwiki
+    restart: unless-stopped
+    depends_on:
+      scm-engine:
+        condition: service_healthy
+    networks:
+      - fusion-net
+    ports:
+      - "8090:8090"
+    environment:
+      # AI Model config — default to local Ollama (airgap-first)
+      - CHAT_MODEL=${ODW_CHAT_MODEL:-llama3.2}
+      - ANALYSIS_MODEL=${ODW_ANALYSIS_MODEL:-llama3.2}
+      - CHAT_API_KEY=${ODW_API_KEY:-ollama}
+      - ENDPOINT=${ODW_ENDPOINT:-http://host.containers.internal:11434/v1}
+      - MODEL_PROVIDER=${ODW_PROVIDER:-OpenAI}
+      # Database
+      - DB_TYPE=sqlite
+      - DB_CONNECTION_STRING=Data Source=/data/KoalaWiki.db
+      # Features
+      - TASK_MAX_SIZE_PER_USER=4
+      - LANGUAGE=English
+      - EnableSmartFilter=true
+      - UPDATE_INTERVAL=5
+      - MAX_FILE_LIMIT=100
+      - ENABLE_INCREMENTAL_UPDATE=true
+      - ENABLE_WAREHOUSE_COMMIT=true
+      - ENABLE_FILE_COMMIT=true
+      - READ_MAX_TOKENS=100000
+      # MCP Streamable config
+      - MCP_STREAMABLE=lucia=http://opendeepwiki:8090/api/mcp
+    volumes:
+      - opendeepwiki-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------------
+  # 9) CODER: Self-hosted CDE platform (Gitpod-equivalent)
+  # Browser IDE + persistent workspaces + Terraform-based templates
+  # Workspace template: coder-template/ provisions LuciVerse containers
+  # Principle #6: Podman-compatible via docker-compatible socket
+  # ---------------------------------------------------------------------
+  coder-db:
+    image: docker.io/postgres:16-alpine
+    container_name: coder-db
+    restart: unless-stopped
+    networks:
+      - fusion-net
+    environment:
+      POSTGRES_USER: coder
+      POSTGRES_PASSWORD: ${CODER_DB_PASSWORD:-coder_sovereign_741}
+      POSTGRES_DB: coder
+    volumes:
+      - coder-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U coder"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  coder:
+    image: ghcr.io/coder/coder:latest
+    container_name: coder
+    restart: unless-stopped
+    depends_on:
+      coder-db:
+        condition: service_healthy
+    networks:
+      - fusion-net
+    ports:
+      - "7080:7080"
+    environment:
+      CODER_PG_CONNECTION_URL: "postgresql://coder:${CODER_DB_PASSWORD:-coder_sovereign_741}@coder-db/coder?sslmode=disable"
+      CODER_HTTP_ADDRESS: "0.0.0.0:7080"
+      CODER_ACCESS_URL: "${CODER_ACCESS_URL:-http://coder.lucidigital.io}"
+      # Wildcard for workspace sub-domains (browser port forwarding)
+      CODER_WILDCARD_ACCESS_URL: "${CODER_WILDCARD_ACCESS_URL:-*.coder.lucidigital.io}"
+      # Use Podman socket for workspace provisioning
+      CODER_PROVISIONER_DAEMON_PSK: "${CODER_PSK:-luciverse_741_psk}"
+      CODER_TELEMETRY_ENABLE: "false"
+      # SCM integration — point at Gogs
+      CODER_GITAUTH_0_ID: "gogs"
+      CODER_GITAUTH_0_TYPE: "gitea"
+      CODER_GITAUTH_0_CLIENT_ID: "${GOGS_OAUTH_CLIENT_ID:-}"
+      CODER_GITAUTH_0_CLIENT_SECRET: "${GOGS_OAUTH_CLIENT_SECRET:-}"
+      CODER_GITAUTH_0_AUTH_URL: "http://gogs.lucidigital.io/login/oauth/authorize"
+      CODER_GITAUTH_0_TOKEN_URL: "http://scm-engine:3000/login/oauth/access_token"
+      CODER_GITAUTH_0_VALIDATE_URL: "http://scm-engine:3000/api/v1/user"
+    volumes:
+      # Podman socket for workspace container provisioning
+      - /run/user/1000/podman/podman.sock:/var/run/docker.sock:ro
+      - coder-data:/home/coder/.config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------------
+  # 10) HOMESTAR: IPVM compute node — content-addressed Wasm task execution
+  # Agent workflows (IPVM DAGs) run here; inputs/outputs are CID-addressed.
+  # Pairs with XET block store for large blob inputs (LuciStones, models).
+  # Ref: https://github.com/ipvm-wg/homestar
+  # IPv6: 2602:F674:0000:0700::700 (VCS coordinator, LDS 700.700)
+  # ---------------------------------------------------------------------
+  homestar:
+    image: ghcr.io/ipvm-wg/homestar:latest
+    container_name: homestar
+    restart: unless-stopped
+    networks:
+      - fusion-net
+    ports:
+      - "7000:7000"   # IPVM task submission API
+      - "7001:7001"   # Homestar metrics / health
+    environment:
+      # Point at local IPFS node for block exchange
+      HOMESTAR_NETWORK__IPFS_HOST: "host.containers.internal"
+      HOMESTAR_NETWORK__IPFS_PORT: "5001"
+      # UCAN keypair — in prod, load from op:// switchboard
+      HOMESTAR_NODE__KEYPAIR_PATH: "/data/node.key"
+      # Publish workflow receipts as IPLD DAG nodes
+      HOMESTAR_WORKFLOW__RECEIPTS_ENABLED: "true"
+    volumes:
+      - homestar-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ---------------------------------------------------------------------
+  # 11) IPFS (Kubo): Block storage backend
+  # XET chunks and IPVM workflow receipts live here.
+  # All sovereign-tier blobs (LuciStones, agent memory, Sentropy snapshots)
+  # get globally unique CIDs.
+  # Ref: https://github.com/ipfs/kubo
+  # IPv6: 2602:F674:0000:0700::529 (block cache, LDS 700.529)
+  # ---------------------------------------------------------------------
+  ipfs:
+    image: ipfs/kubo:latest
+    container_name: ipfs
+    restart: unless-stopped
+    networks:
+      - fusion-net
+    ports:
+      - "4001:4001"   # Swarm (p2p)
+      - "5001:5001"   # API (internal only — not exposed to host)
+      - "8089:8080"   # Gateway (read-only)
+    environment:
+      IPFS_PROFILE: "server"
+    volumes:
+      - ipfs-data:/data/ipfs
+    healthcheck:
+      test: ["CMD", "ipfs", "id"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  gogs-data:
+  caddy-data:
+  caddy-config:
+  opendeepwiki-data:
+  coder-db-data:
+  coder-data:
+  homestar-data:
+  ipfs-data:

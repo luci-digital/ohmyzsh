@@ -1,0 +1,43 @@
+# ============================================================
+# Lucia SCM Engine — Gogs + Gitoxide (gix)
+# ============================================================
+# Extends the official Gogs image with gitoxide for
+# high-performance repository operations inside the container.
+#
+# Uses pre-built musl binaries from GitHub releases instead of
+# compiling from source (which OOM-kills in constrained envs).
+#
+# LDS: 700.741 | Genesis Bond: ACTIVE @ 741 Hz
+# ============================================================
+
+FROM gogs/gogs:latest
+
+LABEL maintainer="daryl@luci.digital"
+LABEL description="Lucia SCM — Gogs + Gitoxide (741 Hz)"
+LABEL org.luci.gitoxide.version="0.51.0"
+LABEL org.luci.lds.tier="700.741"
+
+# Architecture detection for gitoxide binary download
+# Supports: aarch64 (ARM64) and x86_64 (AMD64)
+ARG GITOXIDE_VERSION=0.51.0
+ARG TARGETARCH
+
+# Download pre-built gitoxide binary from GitHub releases
+# Uses max-pure variant (pure Rust, no C deps, maximum portability)
+RUN set -eux; \
+    case "$(uname -m)" in \
+        aarch64) ARCH="aarch64-unknown-linux-musl" ;; \
+        x86_64)  ARCH="x86_64-unknown-linux-musl" ;; \
+        *)       echo "Unsupported arch: $(uname -m)" && exit 1 ;; \
+    esac; \
+    apk add --no-cache curl tar; \
+    curl -sL -o /tmp/gitoxide.tar.gz \
+        "https://github.com/GitoxideLabs/gitoxide/releases/download/v${GITOXIDE_VERSION}/gitoxide-max-pure-v${GITOXIDE_VERSION}-${ARCH}.tar.gz"; \
+    mkdir -p /tmp/gix-extract; \
+    tar xzf /tmp/gitoxide.tar.gz -C /tmp/gix-extract/ --strip-components=1; \
+    mv /tmp/gix-extract/gix /usr/local/bin/gix; \
+    mv /tmp/gix-extract/ein /usr/local/bin/ein; \
+    chmod +x /usr/local/bin/gix /usr/local/bin/ein; \
+    rm -rf /tmp/gitoxide.tar.gz /tmp/gix-extract; \
+    gix --version; \
+    ein --version

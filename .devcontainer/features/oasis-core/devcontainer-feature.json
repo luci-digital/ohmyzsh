@@ -1,0 +1,24 @@
+{
+  "id": "oasis-core",
+  "version": "1.0.0",
+  "name": "LuciVerse oasis-core",
+  "description": "Installs Lua 5.4, LuaRocks, OpenResty, and oasis-core substrate dependencies for LuciVerse development.",
+  "documentationURL": "https://github.com/luci-digital/ohmyzsh/tree/master/.devcontainer/features/oasis-core",
+  "options": {
+    "luaVersion": {
+      "type": "string",
+      "default": "5.4",
+      "description": "Lua version to install"
+    },
+    "sentropyEndpoint": {
+      "type": "string",
+      "default": "http://localhost:7741",
+      "description": "Sentropy QMU service endpoint (port 7741)"
+    }
+  },
+  "containerEnv": {
+    "SENTROPY_ENDPOINT": "${sentropyEndpoint}",
+    "LUA_PATH": "/usr/local/share/lua/${luaVersion}/?.lua;/usr/local/share/lua/${luaVersion}/?/init.lua;;"
+  },
+  "installsAfter": ["ghcr.io/devcontainers/features/common-utils"]
+}

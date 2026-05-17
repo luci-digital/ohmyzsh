@@ -1,0 +1,92 @@
+{
+    # 🌍 GLOBALS
+    email {$LUCIVERSE_ADMIN_EMAIL}
+    admin off
+    persist_config off
+}
+
+# 🚀 LUCI-DIGITAL SOVEREIGN GATEWAY [IPv6 Universal Addressing]
+# Each service bound to its LuciVerse DID address from 2602:F674::/40
+# Source: op://Lucia-AI-Secrets/Genesis Bond Galvanization Record (JSON)
+
+(sovereign_headers) {
+    header {
+        X-LDS-Sovereign-Root "XiPKI-PAC-Tier"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Permissions-Policy "interest-cohort=()"
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+    }
+}
+
+# 🧠 LUCIA ORCHESTRATOR — DID: did:lucidigital:lucia_cargail_silcan
+# Genesis Bond SBB IPv6: 2602:F674:0000:0201:5C1B:F492:6442:0042
+http://[2602:F674:0000:0201:5C1B:F492:6442:0042] http://lucia.lucidigital.io {
+    import sovereign_headers
+    reverse_proxy lucia:8741
+}
+
+# 🛠️ GOGS SCM — LUCIA tier (:0201)
+http://[2602:F674:0000:0201::3000] http://gogs.lucidigital.io {
+    import sovereign_headers
+    reverse_proxy scm-engine:3000
+}
+
+# 🛠️ VERITAS PERFORMANCE TUNING (A-TUNE) — CORE tier (:0028), 528 Hz
+https://[2602:F674:0000:0028::528] veritas.lucidigital.io {
+    tls internal
+    import sovereign_headers
+    root * /srv/veritas
+    file_server
+    # Proxy UI API calls to the A-Tune engine on the Supermicro node
+    handle_path /v1/* {
+        reverse_proxy 192.168.1.7:8383
+    }
+}
+
+# 💻 CODER CDE — LUCIA tier (:0201), port 7080
+# Workspace sub-domains handled via wildcard for browser port forwarding
+http://[2602:F674:0000:0201::7080] http://coder.lucidigital.io {
+    import sovereign_headers
+    reverse_proxy coder:7080
+}
+
+# Wildcard workspace sub-domains (*.coder.lucidigital.io → Coder)
+http://*.coder.lucidigital.io {
+    import sovereign_headers
+    reverse_proxy coder:7080
+}
+
+# 📜 GITWEB read-only mirror — VCS tier (:0700), 528 Hz (Veritas)
+# Served by luci-vcs `web` module; reads bare repos via shared gogs-data volume
+http://[2602:F674:0000:0700::80] http://gitweb.lucidigital.io {
+    import sovereign_headers
+    header X-LuciVerse-Frequency "528"
+    header X-LDS-Tier "700.080"
+    reverse_proxy luci-vcs:7480
+}
+
+# ⚙️  HOMESTAR IPVM — VCS tier (:0700), 528 Hz (Veritas coordinator)
+# Content-addressed agent task submission + workflow receipt retrieval
+http://[2602:F674:0000:0700::700] http://homestar.lucidigital.io {
+    import sovereign_headers
+    header X-LuciVerse-Frequency "528"
+    header X-LDS-Tier "700.700"
+    reverse_proxy homestar:7000
+}
+
+# 🪐 IPFS GATEWAY — VCS tier (:0700), 528 Hz (block store)
+# Read-only CID gateway — LuciStones and workflow receipts addressable by CID
+http://[2602:F674:0000:0700::529] http://ipfs.lucidigital.io {
+    import sovereign_headers
+    header X-LuciVerse-Frequency "528"
+    header X-LDS-Tier "700.529"
+    reverse_proxy ipfs:8080
+}
+
+# 📊 DATAWAVE DASHBOARD — CORE tier (:0028)
+# TODO: Uncomment when datawave service is added to podman-compose.yml
+# http://[2602:F674:0000:0028::8080] http://datawave.lucidigital.io {
+#     import sovereign_headers
+#     reverse_proxy datawave:8080
+# }

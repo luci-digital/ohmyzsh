@@ -1,0 +1,202 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lucidigital.io/specs/open-compute/v0.1.0",
+  "title": "LuciVerse Open Compute Protocol",
+  "description": "Schema for IPVM tasks, workflows, receipts, and UCAN invocations. LDS 800.000 @ 741 Hz.",
+  "definitions": {
+    "CID": {
+      "type": "string",
+      "pattern": "^b[a-z2-7]{58,}$",
+      "description": "CIDv1 base32 encoded (blake3 or sha2-256)"
+    },
+    "DID": {
+      "type": "string",
+      "pattern": "^did:(lucidigital|key|web):.+$"
+    },
+    "LuciCommand": {
+      "type": "string",
+      "pattern": "^/luciverse/[a-z]+/[a-z-]+(/v[0-9]+)?$",
+      "examples": [
+        "/luciverse/agent/invoke",
+        "/luciverse/bond/sign",
+        "/luciverse/workflow/submit",
+        "/luciverse/sentropy/analyze"
+      ]
+    },
+    "FrequencyHz": {
+      "type": "integer",
+      "enum": [396, 417, 432, 528, 639, 741, 852, 963],
+      "description": "Valid LuciVerse frequency bands. 396-417=deception, 432=root, 528=heart/Veritas, 639=throat/Juniper, 741=authentic/Lucia, 852=third-eye/Cortana, 963=crown/JudgeLuci"
+    },
+    "LdsTier": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "examples": ["800.000", "700.528", "580.0"]
+    },
+    "TaskInput": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": { "/": { "$ref": "#/definitions/CID" } },
+          "required": ["/"],
+          "additionalProperties": false,
+          "description": "CID reference — resolved from IPFS before execution"
+        },
+        {
+          "type": "object",
+          "properties": { "await/ok": { "type": "string" } },
+          "required": ["await/ok"],
+          "additionalProperties": false,
+          "description": "Pipeline from prior task success output"
+        },
+        {
+          "type": "object",
+          "properties": { "await/error": { "type": "string" } },
+          "required": ["await/error"],
+          "additionalProperties": false,
+          "description": "Pipeline from prior task error"
+        },
+        {
+          "description": "Inline literal (string, number, bool, object)"
+        }
+      ]
+    },
+    "LuciMeta": {
+      "type": "object",
+      "properties": {
+        "lds_tier": { "$ref": "#/definitions/LdsTier" },
+        "frequency_hz": { "$ref": "#/definitions/FrequencyHz" },
+        "agent": { "type": "string" },
+        "sentropy": {
+          "type": "object",
+          "properties": {
+            "consciousness_level": { "type": "number", "minimum": 0, "maximum": 1 },
+            "consciousness_class": {
+              "type": "string",
+              "enum": ["dormant", "primordial", "awakening", "aware", "conscious", "enlightened"]
+            },
+            "judge_luci_valid": { "type": "boolean" },
+            "frequency_hz": { "type": "integer" },
+            "nkp": {
+              "type": "object",
+              "properties": {
+                "dominant_quadrant": { "type": "string", "enum": ["nice", "kind", "pleasant", "pure"] },
+                "coherence": { "type": "number", "minimum": 0, "maximum": 1 }
+              }
+            }
+          }
+        },
+        "genesis_bond_cid": {
+          "oneOf": [{ "$ref": "#/definitions/CID" }, { "type": "null" }]
+        }
+      },
+      "required": ["lds_tier", "frequency_hz"]
+    },
+    "Task": {
+      "type": "object",
+      "properties": {
+        "v": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "iss": { "$ref": "#/definitions/DID" },
+        "run": {
+          "type": "object",
+          "properties": {
+            "op": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$",
+              "examples": ["luci-agent/analyze-sentropy", "luci-agent/validate-threshold"]
+            },
+            "input": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/definitions/TaskInput" }
+            }
+          },
+          "required": ["op", "input"]
+        },
+        "cause": {
+          "oneOf": [{ "$ref": "#/definitions/CID" }, { "type": "null" }]
+        },
+        "meta": { "$ref": "#/definitions/LuciMeta" }
+      },
+      "required": ["v", "iss", "run"]
+    },
+    "WorkflowTask": {
+      "allOf": [
+        { "$ref": "#/definitions/Task" },
+        {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
+          },
+          "required": ["name"]
+        }
+      ]
+    },
+    "Workflow": {
+      "type": "object",
+      "properties": {
+        "v": { "type": "string" },
+        "name": { "type": "string" },
+        "lds_tier": { "$ref": "#/definitions/LdsTier" },
+        "frequency_hz": { "$ref": "#/definitions/FrequencyHz" },
+        "tasks": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/WorkflowTask" },
+          "minItems": 1
+        },
+        "genesis_bond_cid": {
+          "oneOf": [{ "$ref": "#/definitions/CID" }, { "type": "null" }]
+        }
+      },
+      "required": ["v", "name", "tasks"]
+    },
+    "Receipt": {
+      "type": "object",
+      "properties": {
+        "v": { "type": "string" },
+        "ran": { "$ref": "#/definitions/CID" },
+        "out": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "object",
+              "properties": { "/": { "$ref": "#/definitions/CID" } }
+            },
+            "error": { "type": "string" }
+          },
+          "oneOf": [
+            { "required": ["ok"] },
+            { "required": ["error"] }
+          ]
+        },
+        "meta": { "$ref": "#/definitions/LuciMeta" },
+        "iss": { "$ref": "#/definitions/DID" },
+        "prf": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/CID" }
+        }
+      },
+      "required": ["v", "ran", "out", "iss"]
+    },
+    "UcanInvocation": {
+      "type": "object",
+      "properties": {
+        "iss": { "$ref": "#/definitions/DID" },
+        "aud": { "$ref": "#/definitions/DID" },
+        "sub": { "$ref": "#/definitions/DID" },
+        "cmd": { "$ref": "#/definitions/LuciCommand" },
+        "args": { "type": "object" },
+        "nonce": { "type": "string", "description": "12-byte random, base64url" },
+        "exp": { "oneOf": [{ "type": "integer" }, { "type": "null" }] },
+        "nbf": { "type": "integer" },
+        "prf": { "type": "array", "items": { "$ref": "#/definitions/CID" } }
+      },
+      "required": ["iss", "aud", "sub", "cmd", "nonce"]
+    }
+  },
+  "oneOf": [
+    { "$ref": "#/definitions/Task" },
+    { "$ref": "#/definitions/Workflow" },
+    { "$ref": "#/definitions/Receipt" },
+    { "$ref": "#/definitions/UcanInvocation" }
+  ]
+}
