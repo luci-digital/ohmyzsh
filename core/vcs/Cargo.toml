@@ -75,6 +75,10 @@ tokio = { version = "1", features = ["test-util", "macros"] }
 name = "luci-vcs"
 path = "src/bin/main.rs"
 
+[[bin]]
+name = "vanity"
+path = "src/bin/vanity.rs"
+
 [features]
 default = ["block-cache", "jj-bridge", "gitweb"]
 block-cache = []
