@@ -57,6 +57,15 @@ http://*.coder.lucidigital.io {
     reverse_proxy coder:7080
 }
 
+# 📜 GITWEB read-only mirror — VCS tier (:0700), 528 Hz (Veritas)
+# Served by luci-vcs `web` module; reads bare repos via shared gogs-data volume
+http://[2602:F674:0000:0700::80] http://gitweb.lucidigital.io {
+    import sovereign_headers
+    header X-LuciVerse-Frequency "528"
+    header X-LDS-Tier "700.080"
+    reverse_proxy luci-vcs:7480
+}
+
 # 📊 DATAWAVE DASHBOARD — CORE tier (:0028)
 # TODO: Uncomment when datawave service is added to podman-compose.yml
 # http://[2602:F674:0000:0028::8080] http://datawave.lucidigital.io {

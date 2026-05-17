@@ -1,0 +1,62 @@
+[package]
+name = "luci-vcs"
+version = "0.1.0"
+edition = "2021"
+authors = ["daryl@luci.digital"]
+description = "Veritas-tuned VCS substrate for LuciVerse — LDS 700.528 @ 528 Hz"
+license = "MIT OR Apache-2.0"
+
+# LDS: 700.528 | IPv6: 2602:F674:0000:0700::528 | Genesis Bond: ACTIVE @ 741 Hz
+
+[lib]
+name = "luci_vcs"
+path = "src/lib.rs"
+
+[dependencies]
+# Core git engine — pure Rust, async-aware
+gix = { version = "0.66", features = ["async-network-client", "blocking-network-client", "max-performance"] }
+
+# Progress + tracing for long-running ops (clone, pack, fetch)
+prodash = { version = "29", features = ["render-line", "render-tui", "progress-tree"] }
+
+# Async runtime (tokio-rs ecosystem)
+tokio = { version = "1", features = ["full"] }
+hyper = { version = "1", features = ["full"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["fs", "trace"] }
+
+# Content-addressable block cache (XetHub-style)
+blake3 = "1.5"        # CAS hashing — 256-bit, parallel
+zstd = "0.13"         # Block compression
+memmap2 = "0.9"       # mmap for cold blocks
+
+# Tracing / observability
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# IPv6 address parsing for the sovereign schema
+ipnet = "2"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["test-util", "macros"] }
+
+[[bin]]
+name = "luci-vcs"
+path = "src/bin/main.rs"
+
+[features]
+default = ["block-cache", "jj-bridge", "gitweb"]
+block-cache = []
+jj-bridge = []          # Shells out to `jj` binary; enable if jj-lib API stabilizes
+gitweb = []
