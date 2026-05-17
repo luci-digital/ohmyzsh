@@ -87,7 +87,7 @@ pub enum VcsError {
 /// and the sovereign-tier metadata.
 pub struct LuciRepository {
     inner: gix::Repository,
-    progress: prodash::tree::Root,
+    progress: std::sync::Arc<prodash::tree::Root>,
 }
 
 impl LuciRepository {
