@@ -12,7 +12,7 @@
 
 use std::process;
 
-use luci_vcs::handle::{encode_base9_nozero, parse_handle, tag_for_key, HandleError};
+use luci_vcs::handle::{parse_handle, tag_for_key, HandleError};
 use tracing::{info, warn};
 use tracing_subscriber::{fmt, EnvFilter};
 

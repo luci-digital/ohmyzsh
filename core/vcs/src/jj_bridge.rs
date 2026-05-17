@@ -23,6 +23,7 @@ pub enum JjError {
     Io(#[from] std::io::Error),
 }
 
+#[derive(Debug)]
 pub struct JjBridge<'a> {
     repo_path: &'a Path,
 }
