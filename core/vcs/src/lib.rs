@@ -9,6 +9,7 @@
 //   - LuciVerse IPv6 schema + LDS tier metadata
 
 pub mod block_cache;
+pub mod handle;
 pub mod workflow;
 #[cfg(feature = "gitweb")]
 pub mod web;
