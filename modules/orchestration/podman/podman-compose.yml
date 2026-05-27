@@ -15,7 +15,8 @@ services:
   # ---------------------------------------------------------------------
   scm-engine:
     build:
-      context: .
+      # Gogs + Gitoxide image lives in the scm/gogs module
+      context: ../../scm/gogs
       dockerfile: Dockerfile.gogs
     image: lucia/gogs-gitoxide:latest
     container_name: gogs
@@ -106,7 +107,7 @@ services:
     # IPv6-native: no host port mappings — Caddy listens on LuciVerse
     # IPv6 addresses at standard 80/443 within the fusion-net bridge.
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       # A-Tune-UI SPA build output — set ATUNE_UI_DIST to override
       - ${ATUNE_UI_DIST:-../../../A-Tune-UI/dist/spa}:/srv/veritas:ro
       - caddy-data:/data
