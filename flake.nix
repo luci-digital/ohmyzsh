@@ -66,8 +66,26 @@
         # Runtime inputs + helpers for the format/check apps.
         rustRuntime = [ rustToolchain ] ++ vcsNativeBuildInputs ++ vcsBuildInputs;
         webRuntime = with pkgs; [ nodejs_22 pnpm git ];
+        podmanRuntime = with pkgs; [ podman podman-compose git ];
         # cd to repo root (works regardless of invocation dir).
         cdRoot = ''cd "$(git rev-parse --show-toplevel)"'';
+        composeFile = "modules/orchestration/podman/podman-compose.yml";
+        # Shared zsh syntax-check body (run after cdRoot).
+        zshCheckBody = ''
+          shopt -s nullglob globstar
+          fail=0
+          for f in \
+            modules/legacy/original-layout/oh-my-zsh.sh \
+            modules/legacy/original-layout/lib/*.zsh \
+            modules/legacy/original-layout/plugins/*/*.plugin.zsh \
+            modules/legacy/original-layout/plugins/*/_* \
+            modules/legacy/original-layout/themes/*.zsh-theme \
+            modules/shell/**/*.zsh; do
+            [ -e "$f" ] || continue
+            zsh -n "$f" || { echo "SYNTAX FAIL: $f"; fail=1; }
+          done
+          exit "$fail"
+        '';
       in
       {
         # ── Packages ───────────────────────────────────────────────────────────
@@ -124,37 +142,80 @@
           # zsh syntax check — replicates upstream OMZ CI over the legacy tree + our shell module
           zsh-syntax = mkApp "zsh-syntax" (with pkgs; [ zsh git ]) ''
             ${cdRoot}
-            shopt -s nullglob globstar
-            fail=0
-            for f in \
-              modules/legacy/original-layout/oh-my-zsh.sh \
-              modules/legacy/original-layout/lib/*.zsh \
-              modules/legacy/original-layout/plugins/*/*.plugin.zsh \
-              modules/legacy/original-layout/plugins/*/_* \
-              modules/legacy/original-layout/themes/*.zsh-theme \
-              modules/shell/**/*.zsh; do
-              [ -e "$f" ] || continue
-              zsh -n "$f" || { echo "SYNTAX FAIL: $f"; fail=1; }
-            done
-            exit "$fail"
+            ${zshCheckBody}
           '';
 
           # podman compose config validation
-          compose-config = mkApp "compose-config" (with pkgs; [ podman-compose git ]) ''
+          compose-config = mkApp "compose-config" podmanRuntime ''
             ${cdRoot}
-            podman-compose -f modules/orchestration/podman/podman-compose.yml config
+            podman-compose -f ${composeFile} config
           '';
 
           # Aggregate — run the full local CI gate
           ci = mkApp "ci" (rustRuntime ++ webRuntime
-            ++ (with pkgs; [ shellcheck shfmt zsh podman-compose git ])) ''
+            ++ (with pkgs; [ shellcheck shfmt zsh podman-compose ])) ''
             ${cdRoot}
             echo "▶ cargo test";      ( cd modules/scm/luci-vcs && cargo test )
             echo "▶ web build";       ( cd modules/web/luci-frontend && pnpm install --frozen-lockfile && pnpm build && pnpm test )
             echo "▶ shellcheck";      git ls-files '*.sh' ':!:modules/legacy/**' | xargs -r shellcheck
             echo "▶ shfmt";           git ls-files '*.sh' ':!:modules/legacy/**' | xargs -r shfmt -d
-            echo "▶ compose config";  podman-compose -f modules/orchestration/podman/podman-compose.yml config >/dev/null
+            echo "▶ compose config";  podman-compose -f ${composeFile} config >/dev/null
             echo "✓ local CI gate passed"
+          '';
+
+          # ── Common operations ──────────────────────────────────────────────────
+
+          # dev — frontend dev loop: ensure deps, then live HMR server (port 3000)
+          dev = mkApp "dev" webRuntime ''
+            ${cdRoot}/modules/web/luci-frontend
+            [ -d node_modules ] || pnpm install --frozen-lockfile
+            exec pnpm dev
+          '';
+
+          # web — run the frontend dev server (assumes deps installed)
+          web = mkApp "web" webRuntime ''
+            ${cdRoot}/modules/web/luci-frontend
+            exec pnpm dev
+          '';
+
+          # check — verification gate (tests + lint + syntax + compose validation)
+          check = mkApp "check" (rustRuntime ++ webRuntime
+            ++ (with pkgs; [ shellcheck shfmt zsh podman-compose ])) ''
+            ${cdRoot}
+            echo "▶ cargo test";     ( cd modules/scm/luci-vcs && cargo test )
+            echo "▶ web test";       ( cd modules/web/luci-frontend && pnpm install --frozen-lockfile && pnpm test )
+            echo "▶ shellcheck";     git ls-files '*.sh' ':!:modules/legacy/**' | xargs -r shellcheck
+            echo "▶ shfmt";          git ls-files '*.sh' ':!:modules/legacy/**' | xargs -r shfmt -d
+            echo "▶ zsh syntax";     zsh -n modules/legacy/original-layout/oh-my-zsh.sh
+            echo "▶ compose config"; podman-compose -f ${composeFile} config >/dev/null
+            echo "✓ checks passed"
+          '';
+
+          # compose-up — start the sovereign stack (detached)
+          compose-up = mkApp "compose-up" podmanRuntime ''
+            ${cdRoot}
+            exec podman-compose -f ${composeFile} up -d
+          '';
+
+          # compose-down — stop the sovereign stack
+          compose-down = mkApp "compose-down" podmanRuntime ''
+            ${cdRoot}
+            exec podman-compose -f ${composeFile} down
+          '';
+
+          # deploy-local — build images + (re)start the stack, then show status
+          deploy-local = mkApp "deploy-local" podmanRuntime ''
+            ${cdRoot}
+            echo "▶ building images";  podman-compose -f ${composeFile} build
+            echo "▶ starting stack";   podman-compose -f ${composeFile} up -d
+            echo "▶ status";           podman-compose -f ${composeFile} ps
+            echo "✓ local deploy complete"
+          '';
+
+          # zsh-test — zsh syntax checks over the shell environment
+          zsh-test = mkApp "zsh-test" (with pkgs; [ zsh git ]) ''
+            ${cdRoot}
+            ${zshCheckBody}
           '';
         };
 
