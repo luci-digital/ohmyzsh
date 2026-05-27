@@ -15,6 +15,19 @@
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs { inherit system overlays; };
+        lib = pkgs.lib;
+
+        # Build a runnable `nix run .#<name>` app from a shell script.
+        # Uses writeShellScriptBin (no build-time shellcheck) with explicit
+        # strict mode and a PATH composed from runtimeInputs.
+        mkApp = name: runtimeInputs: text:
+          let
+            script = pkgs.writeShellScriptBin name ''
+              set -euo pipefail
+              export PATH=${lib.makeBinPath runtimeInputs}''${PATH:+:$PATH}
+              ${text}
+            '';
+          in { type = "app"; program = "${script}/bin/${name}"; };
 
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" "clippy" "rustfmt" ];
@@ -49,6 +62,12 @@
           buildNoDefaultFeatures = false;
           doCheck = true;
         };
+
+        # Runtime inputs + helpers for the format/check apps.
+        rustRuntime = [ rustToolchain ] ++ vcsNativeBuildInputs ++ vcsBuildInputs;
+        webRuntime = with pkgs; [ nodejs_22 pnpm git ];
+        # cd to repo root (works regardless of invocation dir).
+        cdRoot = ''cd "$(git rev-parse --show-toplevel)"'';
       in
       {
         # ── Packages ───────────────────────────────────────────────────────────
@@ -60,6 +79,83 @@
         # ── Checks (nix flake check) ─────────────────────────────────────────────
         checks = {
           luci-vcs-tests = luci-vcs;
+        };
+
+        # ── Apps (nix run .#<name>) — format + check entry points ────────────────
+        apps = {
+          # web/luci-frontend — pnpm lifecycle
+          web-install = mkApp "web-install" webRuntime ''
+            ${cdRoot}/modules/web/luci-frontend
+            pnpm install --frozen-lockfile
+          '';
+          web-build = mkApp "web-build" webRuntime ''
+            ${cdRoot}/modules/web/luci-frontend
+            pnpm build
+          '';
+          web-test = mkApp "web-test" webRuntime ''
+            ${cdRoot}/modules/web/luci-frontend
+            pnpm test
+          '';
+
+          # scm/luci-vcs — cargo
+          cargo-check = mkApp "cargo-check" (rustRuntime ++ [ pkgs.git ]) ''
+            ${cdRoot}/modules/scm/luci-vcs
+            cargo check
+          '';
+          cargo-test = mkApp "cargo-test" (rustRuntime ++ [ pkgs.git ]) ''
+            ${cdRoot}/modules/scm/luci-vcs
+            cargo test
+          '';
+
+          # Shell hygiene — shellcheck + shfmt over our own scripts (legacy OMZ excluded)
+          shellcheck = mkApp "shellcheck" (with pkgs; [ shellcheck git ]) ''
+            ${cdRoot}
+            mapfile -t files < <(git ls-files '*.sh' ':!:modules/legacy/**')
+            if [ "''${#files[@]}" -eq 0 ]; then echo "no .sh files to check"; exit 0; fi
+            shellcheck "''${files[@]}"
+          '';
+          shfmt = mkApp "shfmt" (with pkgs; [ shfmt git ]) ''
+            ${cdRoot}
+            mapfile -t files < <(git ls-files '*.sh' ':!:modules/legacy/**')
+            if [ "''${#files[@]}" -eq 0 ]; then echo "no .sh files to format-check"; exit 0; fi
+            shfmt -d "''${files[@]}"
+          '';
+
+          # zsh syntax check — replicates upstream OMZ CI over the legacy tree + our shell module
+          zsh-syntax = mkApp "zsh-syntax" (with pkgs; [ zsh git ]) ''
+            ${cdRoot}
+            shopt -s nullglob globstar
+            fail=0
+            for f in \
+              modules/legacy/original-layout/oh-my-zsh.sh \
+              modules/legacy/original-layout/lib/*.zsh \
+              modules/legacy/original-layout/plugins/*/*.plugin.zsh \
+              modules/legacy/original-layout/plugins/*/_* \
+              modules/legacy/original-layout/themes/*.zsh-theme \
+              modules/shell/**/*.zsh; do
+              [ -e "$f" ] || continue
+              zsh -n "$f" || { echo "SYNTAX FAIL: $f"; fail=1; }
+            done
+            exit "$fail"
+          '';
+
+          # podman compose config validation
+          compose-config = mkApp "compose-config" (with pkgs; [ podman-compose git ]) ''
+            ${cdRoot}
+            podman-compose -f modules/orchestration/podman/podman-compose.yml config
+          '';
+
+          # Aggregate — run the full local CI gate
+          ci = mkApp "ci" (rustRuntime ++ webRuntime
+            ++ (with pkgs; [ shellcheck shfmt zsh podman-compose git ])) ''
+            ${cdRoot}
+            echo "▶ cargo test";      ( cd modules/scm/luci-vcs && cargo test )
+            echo "▶ web build";       ( cd modules/web/luci-frontend && pnpm install --frozen-lockfile && pnpm build && pnpm test )
+            echo "▶ shellcheck";      git ls-files '*.sh' ':!:modules/legacy/**' | xargs -r shellcheck
+            echo "▶ shfmt";           git ls-files '*.sh' ':!:modules/legacy/**' | xargs -r shfmt -d
+            echo "▶ compose config";  podman-compose -f modules/orchestration/podman/podman-compose.yml config >/dev/null
+            echo "✓ local CI gate passed"
+          '';
         };
 
         # ── Dev shells — one per subsystem, plus an everything default ───────────
@@ -112,6 +208,14 @@
           };
         };
 
-        formatter = pkgs.nixpkgs-fmt;
+        # `nix fmt` — format Nix, shell, and Rust in place (legacy OMZ untouched).
+        formatter = pkgs.writeShellScriptBin "luci-fmt" ''
+          set -euo pipefail
+          export PATH=${lib.makeBinPath (with pkgs; [ nixpkgs-fmt shfmt rustToolchain git ])}''${PATH:+:$PATH}
+          ${cdRoot}
+          git ls-files '*.nix' | xargs -r nixpkgs-fmt
+          git ls-files '*.sh' ':!:modules/legacy/**' | xargs -r shfmt -w
+          ( cd modules/scm/luci-vcs && cargo fmt )
+        '';
       });
 }
